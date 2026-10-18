@@ -95,8 +95,6 @@ N1MM 的 UDP 广播按**字符数**计算发送长度，当 Windows 计算机名
 ## 相关文档
 
 - [INSTALL_UBUNTU_CN.md](/INSTALL_UBUNTU_CN.md) — Ubuntu 部署详细说明（与本文档安装部分一致）
-- [INSTALL.md](/INSTALL.md) / [Manual_INSTALL.md](/Manual_INSTALL.md) — 原版手动安装说明
-- [docs/DESCRIPTION.md](/docs/DESCRIPTION.md) / [docs/CONTRIBUTE.md](/docs/CONTRIBUTE.md) — 原版项目介绍与贡献指南
 
 ## 提问与交流
 
