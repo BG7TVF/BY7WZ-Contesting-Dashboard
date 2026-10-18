@@ -7772,11 +7772,16 @@
                 "t": "eq",
                 "v": "so2r",
                 "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "so1r",
+                "vt": "str"
             }
         ],
         "checkall": "true",
         "repair": false,
-        "outputs": 3,
+        "outputs": 4,
         "x": 710,
         "y": 1740,
         "wires": [
@@ -7792,6 +7797,10 @@
             [
                 "15fa6dac50ec3359",
                 "bb7fdde37dcf367e"
+            ],
+            [
+                "4fdbbfe296a88bce",
+                "3e86130caa4f1f80"
             ]
         ]
     },
@@ -10608,16 +10617,24 @@
                 "t": "eq",
                 "v": "so2r",
                 "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "so1r",
+                "vt": "str"
             }
         ],
         "checkall": "true",
         "repair": false,
-        "outputs": 3,
+        "outputs": 4,
         "x": 2850,
         "y": 1260,
         "wires": [
             [
                 "d53bdbd6ba3fdfed"
+            ],
+            [
+                "168faf5992e055d7"
             ],
             [
                 "168faf5992e055d7"
@@ -10650,16 +10667,24 @@
                 "t": "eq",
                 "v": "so2r",
                 "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "so1r",
+                "vt": "str"
             }
         ],
         "checkall": "true",
         "repair": false,
-        "outputs": 3,
+        "outputs": 4,
         "x": 2850,
         "y": 1380,
         "wires": [
             [
                 "d1e531d474c42dde"
+            ],
+            [
+                "64ca2307721f7954"
             ],
             [
                 "64ca2307721f7954"
@@ -10675,7 +10700,7 @@
         "z": "407d2b774fe67647",
         "g": "26cf0678322d1bb6",
         "name": "Set Label & Payload",
-        "func": "let category = global.get('category')\nlet totalnoqsos = flow.get('totalnoqsos');\nlet totalmults = flow.get('totalmults');\nlet totalpoints = flow.get('totalpoints');\nlet rateperQ = null;\nlet rate = null;\nmsg.label = null;\nlet length = null;\n\nif(msg.payload == undefined){\n    msg.payload = 'n/a';\n    return msg;\n}\n\nif (category == \"multiop\"){\n    node.status({text: msg.payload[0].operator});\n    msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].operator;\n    msg.label = \"Top OP Score\";\n    return msg;\n}else if (category == \"so2r\" || category == \"so1v\"){\n    if (totalmults == 0 || totalmults == undefined || totalnoqsos == 0 || totalnoqsos == undefined ){\n        rateperQ = 0;\n    }else {\n        rateperQ = totalnoqsos / totalmults;\n        rateperQ = parseInt(rateperQ.toFixed(1));   \n        if (rateperQ < 1){\n            rateperQ = 0\n        }\n    }\n    \n    rate = msg.payload[0].rate;\n    length = rate.toString().length + rateperQ.toString().length + 8;\n\n    msg.totallength = length;\n    node.status({ text: [rate,\" Q/HR\"].join(\"\") });\n    if (length <= 10){\n        msg.payload = \"<font color=#FFFF00>\" + rate + \"</font><font color='#FFFF00' size=4>/Hr | </font><font color ='#ffff00'>\" + rateperQ + \"</font><font color='#FFFF00' size=4>/Qs</font>\";\n    }else{\n        msg.payload = \"<font color=#FFFF00>\" + rate + \"</font><font color='#FFFF00' size=4>/Hr | </font><font color ='#ffff00'>\" + rateperQ + \"</font><font color='#FFFF00' size=4>/Qs</font>\";\n    }\n\n    msg.label = \"M/Hr | 1 Mult = \";\n    return msg;\n}",
+        "func": "let category = global.get('category')\nlet totalnoqsos = flow.get('totalnoqsos');\nlet totalmults = flow.get('totalmults');\nlet totalpoints = flow.get('totalpoints');\nlet rateperQ = null;\nlet rate = null;\nmsg.label = null;\nlet length = null;\n\nif(msg.payload == undefined){\n    msg.payload = 'n/a';\n    return msg;\n}\n\nif (category == \"multiop\"){\n    node.status({text: msg.payload[0].operator});\n    msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].operator;\n    msg.label = \"Top OP Score\";\n    return msg;\n}else if (category == \"so2r\" || category == \"so1v\" || category == \"so1r\"){\n    if (totalmults == 0 || totalmults == undefined || totalnoqsos == 0 || totalnoqsos == undefined ){\n        rateperQ = 0;\n    }else {\n        rateperQ = totalnoqsos / totalmults;\n        rateperQ = parseInt(rateperQ.toFixed(1));   \n        if (rateperQ < 1){\n            rateperQ = 0\n        }\n    }\n    \n    rate = msg.payload[0].rate;\n    length = rate.toString().length + rateperQ.toString().length + 8;\n\n    msg.totallength = length;\n    node.status({ text: [rate,\" Q/HR\"].join(\"\") });\n    if (length <= 10){\n        msg.payload = \"<font color=#FFFF00>\" + rate + \"</font><font color='#FFFF00' size=4>/Hr | </font><font color ='#ffff00'>\" + rateperQ + \"</font><font color='#FFFF00' size=4>/Qs</font>\";\n    }else{\n        msg.payload = \"<font color=#FFFF00>\" + rate + \"</font><font color='#FFFF00' size=4>/Hr | </font><font color ='#ffff00'>\" + rateperQ + \"</font><font color='#FFFF00' size=4>/Qs</font>\";\n    }\n\n    msg.label = \"M/Hr | 1 Mult = \";\n    return msg;\n}",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -10733,7 +10758,7 @@
         "z": "407d2b774fe67647",
         "g": "26cf0678322d1bb6",
         "name": "Set Label & Payload",
-        "func": "let category = global.get('category')\nlet distance = global.get('distance_measurement')\n\nif (msg.payload[0].max_distance == null){\n    msg.payload[0].max_distance = 0;\n}\n\nif (category == \"multiop\"){\n    node.status({ fill: \"grey\", shape: \"dot\", text: [\"Mults:\", msg.payload[0].operator].join(\"\") });\n    msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].operator;\n    msg.label = \"Top OP Mults\";\n    return msg;\n}else if (category == \"so2r\" || category == \"so1v\"){\n    node.status({fill:\"grey\",shape:\"ring\",text:[msg.payload[0].max_distance,distance.substring(0,1)].join(\"\")});\n    if (distance == \"miles\")    {\n        msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].max_distance + \" \" + \"M\"\n    }else if (distance == \"km\"){\n        msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].max_distance + \" \" + \"Km\"\n    }\n    msg.label = \"Furthest QSO\";\n    return msg;\n}",
+        "func": "let category = global.get('category')\nlet distance = global.get('distance_measurement')\n\nif (msg.payload[0].max_distance == null){\n    msg.payload[0].max_distance = 0;\n}\n\nif (category == \"multiop\"){\n    node.status({ fill: \"grey\", shape: \"dot\", text: [\"Mults:\", msg.payload[0].operator].join(\"\") });\n    msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].operator;\n    msg.label = \"Top OP Mults\";\n    return msg;\n}else if (category == \"so2r\" || category == \"so1v\" || category == \"so1r\"){\n    node.status({fill:\"grey\",shape:\"ring\",text:[msg.payload[0].max_distance,distance.substring(0,1)].join(\"\")});\n    if (distance == \"miles\")    {\n        msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].max_distance + \" \" + \"M\"\n    }else if (distance == \"km\"){\n        msg.payload = \"<font color=#FFFF00>\" + msg.payload[0].max_distance + \" \" + \"Km\"\n    }\n    msg.label = \"Furthest QSO\";\n    return msg;\n}",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -25395,7 +25420,7 @@
         "z": "1c66bd27e16a3fec",
         "g": "f01baabf4527b6e5",
         "name": "If Mult Say Mult",
-        "func": "let m1 = msg.payload.contactinfo.ismultiplier1[0];\nlet m2 = msg.payload.contactinfo.ismultiplier2[0];\nlet m3 = msg.payload.contactinfo.ismultiplier3[0];\nlet category = global.get('category');\n\nlet op = msg.payload.contactinfo.operator[0];\nlet band1 = msg.payload.contactinfo.band[0];\n\n\nif (m1 == \"1\" || m2 == '1' || m3 == '1')\n{\n    \n    if (category == 'multiop')\n    {\n    msg.payload = \"New Multiplyer from \" + op;\n    return msg;\n    }\n\n    if (category == 'so1v' || category == 'so2r')\n    {\n    msg.payload = \"New Multiplyer\"\n    return msg;\n    }\n    \n}\n\n",
+        "func": "let m1 = msg.payload.contactinfo.ismultiplier1[0];\nlet m2 = msg.payload.contactinfo.ismultiplier2[0];\nlet m3 = msg.payload.contactinfo.ismultiplier3[0];\nlet category = global.get('category');\n\nlet op = msg.payload.contactinfo.operator[0];\nlet band1 = msg.payload.contactinfo.band[0];\n\n\nif (m1 == \"1\" || m2 == '1' || m3 == '1')\n{\n    \n    if (category == 'multiop')\n    {\n    msg.payload = \"New Multiplyer from \" + op;\n    return msg;\n    }\n\n    if (category == 'so1v' || category == 'so2r' || category == 'so1r')\n    {\n    msg.payload = \"New Multiplyer\"\n    return msg;\n    }\n    \n}\n\n",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -26529,6 +26554,44 @@
         "x": 1315,
         "y": 80,
         "wires": []
+    },
+    {
+        "id": "nrfix01clearstatsin",
+        "type": "link in",
+        "z": "407d2b774fe67647",
+        "name": "Clear All Stats IN",
+        "links": [
+            "5e1859619292b1b8"
+        ],
+        "x": 1800,
+        "y": 1160,
+        "wires": [
+            [
+                "nrfix02resetscoretexts"
+            ]
+        ]
+    },
+    {
+        "id": "nrfix02resetscoretexts",
+        "type": "function",
+        "z": "407d2b774fe67647",
+        "name": "Reset Total Score & QSO Count",
+        "func": "// Zero the Total Score / Total QSO's dashboard texts when all stats are cleared.\n// Note: the logger keeps broadcasting its own cumulative score;\n// these displays will refresh when the logger sends a new score value.\nlet score = { payload: { dynamicresults: { score: [0] } }, color: \"#FFFFFF\" };\nlet qsos = { payload: { totalnoqsos: 0 }, color: \"#FFFFFF\" };\nreturn [score, qsos];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 2040,
+        "y": 1160,
+        "wires": [
+            [
+                "2cdd5ffb3ac01f73"
+            ],
+            [
+                "9b7d271988034596"
+            ]
+        ]
     },
     {
         "id": "be733be1c4eca984",
@@ -29341,6 +29404,11 @@
             {
                 "label": "SO1V",
                 "value": "so1v",
+                "type": "str"
+            },
+            {
+                "label": "SO1R",
+                "value": "so1r",
                 "type": "str"
             }
         ],
