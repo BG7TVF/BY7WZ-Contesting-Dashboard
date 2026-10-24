@@ -83,6 +83,7 @@ N1MM 的 UDP 广播按**字符数**计算发送长度，当 Windows 计算机名
 | 现象 | 原因与处理 |
 | --- | --- |
 | `bash: /dev/fd/63: No such file or directory` + `curl: (23)` | URL 被反引号包裹（bash 命令替换），或当前 shell 不支持进程替换 → 改用"先下载再执行" |
+| `Node-RED v4.x no longer supports Nodejs 18` / `无法生成 settings.js` | Ubuntu 24.04 自带 Node 18，Node-RED 4/5 需要 Node 20+ → 新版脚本会自动加 `--node22` 升级；也可手动执行 `--node22` |
 | `E: Failed to fetch ... Connection timed out` / `Network is unreachable` | 服务器到 Ubuntu 源网络不稳定或 IPv6 不可达 → 脚本已自动重试并在失败后强制 IPv4；仍失败可换国内 apt 源后重跑 |
 | Radio 1/2 表格 Mode/Freq/Status 不显示 | 未设置 global.category / PC1 → 见"安装后必做的配置" |
 | 调试面板持续报 `Unclosed root tag` | Windows 计算机名含中文导致广播截断 → 改纯英文计算机名 |

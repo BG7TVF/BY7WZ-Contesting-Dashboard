@@ -246,36 +246,64 @@ fi
 ################################################################################
 step "安装 Node-RED 核心（已安装则自动跳过）"
 ################################################################################
-if command -v node-red >/dev/null 2>&1; then
-    log_info "检测到 Node-RED 已安装，跳过核心安装"
-    node-red --version 2>/dev/null || true
+# 判断 Node-RED 是否真正可用：可执行文件存在但 Node 版本不兼容时，运行会直接报错
+nodered_ok() { command -v node-red >/dev/null 2>&1 && node-red --version >/dev/null 2>&1; }
+node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+
+if nodered_ok; then
+    log_info "检测到可用的 Node-RED: $(node-red --version 2>/dev/null | head -n1)"
 else
     log_info "调用 Node-RED 官方安装器（约 10-20 分钟，请耐心等待）..."
     NODERED_INSTALLER="/tmp/update-nodejs-and-nodered"
+    INSTALLER_ARGS=("--nodered-user=$TARGET_USER" "--confirm-root")
+    NODE_MAJOR="$(node_major)"
+    # Node-RED 4/5 不再支持 Node.js 18（Ubuntu 24.04 自带 v18），
+    # 让官方安装器顺带升级到 Node 22，否则安装器会直接退出
+    if [[ "$NODE_MAJOR" -lt 20 ]]; then
+        log_warn "当前 Node.js v$NODE_MAJOR 低于 Node-RED 4/5 要求，安装时一并升级到 Node 22"
+        INSTALLER_ARGS+=("--node22")
+    fi
     if fetch_file "https://raw.githubusercontent.com/node-red/linux-installers/master/deb/update-nodejs-and-nodered" "$NODERED_INSTALLER"; then
-        bash "$NODERED_INSTALLER" --nodered-user="$TARGET_USER" --confirm-root \
+        bash "$NODERED_INSTALLER" "${INSTALLER_ARGS[@]}" \
             || log_warn "官方安装器返回失败，尝试其他安装方式..."
     else
         log_warn "官方安装器下载失败（GitHub 不可达），尝试其他安装方式..."
     fi
 
-    # 官方安装器即使核心安装失败也返回成功，必须显式验证
-    if ! command -v node-red >/dev/null 2>&1; then
+    # 官方安装器即使核心安装失败也返回成功，必须显式验证可运行
+    if ! nodered_ok; then
         log_warn "Node-RED 核心未就绪，改用 npm 手动安装..."
         if ! command -v npm >/dev/null 2>&1; then
             log_warn "系统缺少 npm，尝试通过 apt 安装 nodejs/npm..."
             apt_install nodejs npm || log_warn "apt 安装 nodejs/npm 失败"
         fi
+        NODE_MAJOR="$(node_major)"
+        # Node-RED 5 要求 Node >= 22.9；Node 18 只能装 Node-RED 3.x
+        if [[ "$NODE_MAJOR" -lt 20 ]]; then
+            log_warn "Node.js v$NODE_MAJOR 过低，尝试通过 NodeSource 安装 Node 22..."
+            if fetch_file "https://deb.nodesource.com/setup_22.x" "/tmp/nodesource_setup.sh"; then
+                bash "/tmp/nodesource_setup.sh" >/dev/null 2>&1 || log_warn "NodeSource 源配置失败"
+                apt_install nodejs || log_warn "通过 apt 安装 Node 22 失败"
+            fi
+            NODE_MAJOR="$(node_major)"
+        fi
         if command -v npm >/dev/null 2>&1; then
             npm config set registry "$NPM_REGISTRY" || true
-            npm install -g --unsafe-perm --no-audit --no-fund node-red \
-                || log_warn "npm 全局安装 node-red 失败"
+            if [[ "$NODE_MAJOR" -lt 20 ]]; then
+                log_warn "仍是 Node.js v$NODE_MAJOR，改安装兼容的 Node-RED 3.x"
+                npm install -g --unsafe-perm --no-audit --no-fund node-red@3 \
+                    || log_warn "npm 全局安装 node-red 失败"
+            else
+                npm install -g --unsafe-perm --no-audit --no-fund node-red \
+                    || log_warn "npm 全局安装 node-red 失败"
+            fi
         fi
     fi
 
-    if ! command -v node-red >/dev/null 2>&1; then
-        log_error "Node-RED 核心安装失败。请检查 /var/log/nodered-install.log，或手动重试："
-        log_error "  curl -fsSL https://raw.githubusercontent.com/node-red/linux-installers/master/deb/update-nodejs-and-nodered -o /tmp/nr.sh && bash /tmp/nr.sh --nodered-user=$TARGET_USER --confirm-root"
+    if ! nodered_ok; then
+        log_error "Node-RED 核心安装失败。当前环境: node $(node -v 2>/dev/null || echo 未安装) / npm $(npm -v 2>/dev/null || echo 未安装)"
+        log_error "手动重试（会自动升级到 Node 22）："
+        log_error "  curl -fsSL https://raw.githubusercontent.com/node-red/linux-installers/master/deb/update-nodejs-and-nodered -o /tmp/nr.sh && bash /tmp/nr.sh --nodered-user=$TARGET_USER --confirm-root --node22"
         exit 1
     fi
 
@@ -322,14 +350,25 @@ mkdir -p "$NR_DIR" && chown -R "$TARGET_USER:$TARGET_USER" "$NR_DIR"
 # settings.js 只在 Node-RED 首次启动时生成；不存在则短暂启动一次生成
 if [[ ! -f "$SETTINGS_JS" ]]; then
     log_warn "settings.js 不存在，短暂启动 Node-RED 以生成默认配置..."
-    su - "$TARGET_USER" -c "node-red >/dev/null 2>&1" &
+    BOOT_LOG="/tmp/nodered-boot.log"
+    su - "$TARGET_USER" -c "node-red > '$BOOT_LOG' 2>&1" &
     BOOT_PID=$!
     for _ in $(seq 1 30); do [[ -f "$SETTINGS_JS" ]] && break; sleep 1; done
     kill "$BOOT_PID" 2>/dev/null || true
     pkill -u "$TARGET_USER" -f "node-red" 2>/dev/null || true
     wait "$BOOT_PID" 2>/dev/null || true
+    if [[ ! -f "$SETTINGS_JS" ]]; then
+        log_warn "启动生成失败，Node-RED 输出："
+        tail -n 15 "$BOOT_LOG" 2>/dev/null || true
+        # 回退方案：直接使用 npm 包内自带的 settings.js 模板
+        NODERED_TEMPLATE="$(npm root -g 2>/dev/null)/node-red/settings.js"
+        if [[ -f "$NODERED_TEMPLATE" ]]; then
+            log_warn "改用 npm 包自带模板生成 settings.js"
+            cp "$NODERED_TEMPLATE" "$SETTINGS_JS"
+        fi
+    fi
 fi
-[[ -f "$SETTINGS_JS" ]] || { log_error "无法生成 settings.js"; exit 1; }
+[[ -f "$SETTINGS_JS" ]] || { log_error "无法生成 settings.js（Node-RED 可能无法在当前 Node.js 版本上运行）"; exit 1; }
 
 BACKUP="$SETTINGS_JS.bak.$(date +%Y%m%d%H%M%S)"
 cp "$SETTINGS_JS" "$BACKUP"
