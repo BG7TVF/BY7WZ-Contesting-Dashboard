@@ -38,12 +38,16 @@ NR_USER="${NR_USER:-}"
 # 可用命令行参数 -f/--full、-u/--update 或环境变量 MODE 指定；
 # 未指定且检测到已有安装时会交互询问。
 MODE="${MODE:-}"
+# 是否顺带升级系统软件包（默认关闭：全量升级要下载约 1GB，
+# 网络不佳时会中断整个安装）。需要时加 --upgrade 或设 UPGRADE_SYSTEM=1。
+UPGRADE_SYSTEM="${UPGRADE_SYSTEM:-0}"
 for arg in "$@"; do
     case "$arg" in
         -f|--full|--repair) MODE="full" ;;
         -u|--update)        MODE="update" ;;
+        --upgrade)          UPGRADE_SYSTEM="1" ;;
         -h|--help)
-            echo "用法: sudo $0 [-f|--full 修复模式 | -u|--update 更新模式]"
+            echo "用法: sudo $0 [-f|--full 修复模式 | -u|--update 更新模式] [--upgrade 顺带升级系统]"
             exit 0
             ;;
         *) ;;  # 忽略未知参数
@@ -70,6 +74,44 @@ step() {
 }
 
 trap 'log_error "脚本在第 $LINENO 行执行失败，安装中断。请查看上方输出排查。"' ERR
+
+# 带重试的 apt update；首次失败后改用 IPv4（部分 VPS/云主机 IPv6 不可达，
+# 表现为 "Cannot initiate the connection ... Network is unreachable"）
+apt_update() {
+    local i
+    for i in 1 2 3; do
+        apt-get update && return 0
+        log_warn "apt-get update 失败，5 秒后重试 ($i/3)..."
+        sleep 5
+    done
+    log_warn "改用 IPv4 重试 apt-get update（忽略 IPv6 不可达问题）..."
+    apt-get -o Acquire::ForceIPv4=true update
+}
+
+# 带重试的 apt install；--fix-missing 可跳过个别下载失败的包
+apt_install() {
+    local i
+    for i in 1 2 3; do
+        apt-get install -y --fix-missing "$@" && return 0
+        log_warn "apt-get install 失败，5 秒后重试 ($i/3)..."
+        sleep 5
+        apt-get -o Acquire::ForceIPv4=true update >/dev/null 2>&1 || true
+    done
+    return 1
+}
+
+# 带重试下载到文件（不依赖 bash 进程替换 /dev/fd，任何精简系统都适用）
+fetch_file() {
+    local url="$1" out="$2" i
+    for i in 1 2 3; do
+        if curl -fsSL --connect-timeout 20 --retry 2 -o "$out" "$url" && [[ -s "$out" ]]; then
+            return 0
+        fi
+        log_warn "下载失败，5 秒后重试 ($i/3): $url"
+        sleep 5
+    done
+    return 1
+}
 
 # 从现有 nodered.service 中读取运行用户（保证重装/续装时一致）
 detect_target_user() {
@@ -105,6 +147,13 @@ if [[ -f /etc/os-release ]]; then
     # shellcheck disable=SC1091
     source /etc/os-release
     [[ "${ID:-}" == "ubuntu" ]] || log_warn "本脚本针对 Ubuntu 设计，当前系统: ${ID:-unknown}"
+fi
+
+# 脚本依赖 systemd 管理 Node-RED 服务；容器/精简系统里没有 systemd 时提前明确报错
+if ! command -v systemctl >/dev/null 2>&1 || [[ ! -d /run/systemd/system ]]; then
+    log_error "当前环境没有运行 systemd（常见于 Docker/WSL1 容器），无法管理 nodered 服务。"
+    log_error "请在普通 Ubuntu 24.04 主机或支持 systemd 的容器中运行。"
+    exit 1
 fi
 
 SERVICE_FILE=""
@@ -154,26 +203,45 @@ START_TS=$(date +%s)
 ################################################################################
 step "更新系统并安装基础依赖"
 ################################################################################
+# apt update 失败不直接中止：可能已有本地索引，后面的 install 仍可成功
+apt_update || log_warn "apt-get update 多次失败，将尝试使用现有软件包索引继续"
+
+# 系统全量升级可选（--upgrade）：约 1GB 下载，网络差时极易中断，
+# 且失败与仪表盘本身无关，因此默认不做、失败也不中止
+if [[ "$UPGRADE_SYSTEM" == "1" ]]; then
+    log_info "按请求执行系统软件包升级（--upgrade）..."
+    apt-get full-upgrade -y || log_warn "系统升级未完成（网络或依赖问题），继续安装本项目"
+    apt-get clean || true
+fi
+
 if [[ "$MODE" == "full" ]]; then
-    apt-get update
-    apt-get full-upgrade -y
-    apt-get install -y git sqlite3 build-essential curl ca-certificates
-    apt-get clean
+    apt_install git sqlite3 build-essential curl ca-certificates \
+        || { log_error "基础依赖安装失败，请检查网络/apt 源后重试"; exit 1; }
     log_info "基础依赖安装完成 (git / sqlite3 / build-essential / curl)"
 else
-    apt-get update
-    apt-get install -y git sqlite3 curl ca-certificates
+    apt_install git sqlite3 curl ca-certificates \
+        || { log_error "基础依赖安装失败，请检查网络/apt 源后重试"; exit 1; }
     log_info "基础依赖检查完成（更新模式跳过系统升级）"
 fi
+
+# 关键命令缺失时给出明确提示，避免后续步骤以难懂的错误中断
+for cmd in git sqlite3 curl; do
+    command -v "$cmd" >/dev/null 2>&1 || { log_error "缺少必需命令: $cmd"; exit 1; }
+done
 
 ################################################################################
 step "配置 npm 镜像源（解决 registry.npmjs.org 超时问题）"
 ################################################################################
-# 给 root 配置（官方安装器内部调用 npm 时使用 root 的配置）
-npm config set registry "$NPM_REGISTRY"
-npm config set fetch-retries 5
-npm config set fetch-retry-maxtimeout 120000
-log_info "root 用户 npm 源: $(npm config get registry)"
+# 全新系统上 npm 尚未安装（Node.js 由下一步的官方安装器安装），
+# 此时跳过配置，等核心装好后再设置，避免 "npm: command not found" 中断
+if command -v npm >/dev/null 2>&1; then
+    npm config set registry "$NPM_REGISTRY" || true
+    npm config set fetch-retries 5 || true
+    npm config set fetch-retry-maxtimeout 120000 || true
+    log_info "root 用户 npm 源: $(npm config get registry 2>/dev/null || echo "$NPM_REGISTRY")"
+else
+    log_info "npm 尚未安装，将在安装 Node-RED 核心后配置镜像源"
+fi
 
 ################################################################################
 step "安装 Node-RED 核心（已安装则自动跳过）"
@@ -183,19 +251,38 @@ if command -v node-red >/dev/null 2>&1; then
     node-red --version 2>/dev/null || true
 else
     log_info "调用 Node-RED 官方安装器（约 10-20 分钟，请耐心等待）..."
-    bash <(curl -sL https://raw.githubusercontent.com/node-red/linux-installers/master/deb/update-nodejs-and-nodered) \
-        --nodered-user="$TARGET_USER" --confirm-root
+    NODERED_INSTALLER="/tmp/update-nodejs-and-nodered"
+    if fetch_file "https://raw.githubusercontent.com/node-red/linux-installers/master/deb/update-nodejs-and-nodered" "$NODERED_INSTALLER"; then
+        bash "$NODERED_INSTALLER" --nodered-user="$TARGET_USER" --confirm-root \
+            || log_warn "官方安装器返回失败，尝试其他安装方式..."
+    else
+        log_warn "官方安装器下载失败（GitHub 不可达），尝试其他安装方式..."
+    fi
 
     # 官方安装器即使核心安装失败也返回成功，必须显式验证
     if ! command -v node-red >/dev/null 2>&1; then
-        log_warn "官方安装器未能装上 Node-RED 核心，改用 npm 手动安装..."
-        npm install -g --unsafe-perm --no-audit --no-fund node-red
+        log_warn "Node-RED 核心未就绪，改用 npm 手动安装..."
+        if ! command -v npm >/dev/null 2>&1; then
+            log_warn "系统缺少 npm，尝试通过 apt 安装 nodejs/npm..."
+            apt_install nodejs npm || log_warn "apt 安装 nodejs/npm 失败"
+        fi
+        if command -v npm >/dev/null 2>&1; then
+            npm config set registry "$NPM_REGISTRY" || true
+            npm install -g --unsafe-perm --no-audit --no-fund node-red \
+                || log_warn "npm 全局安装 node-red 失败"
+        fi
     fi
 
     if ! command -v node-red >/dev/null 2>&1; then
-        log_error "Node-RED 核心安装失败。请检查 /var/log/nodered-install.log"
+        log_error "Node-RED 核心安装失败。请检查 /var/log/nodered-install.log，或手动重试："
+        log_error "  curl -fsSL https://raw.githubusercontent.com/node-red/linux-installers/master/deb/update-nodejs-and-nodered -o /tmp/nr.sh && bash /tmp/nr.sh --nodered-user=$TARGET_USER --confirm-root"
         exit 1
     fi
+
+    # 核心就绪后 npm 一定存在，补设镜像源供后续依赖安装使用
+    npm config set registry "$NPM_REGISTRY" 2>/dev/null || true
+    npm config set fetch-retries 5 2>/dev/null || true
+    npm config set fetch-retry-maxtimeout 120000 2>/dev/null || true
 fi
 
 # 官方安装器可能把服务配置成与预期不同的用户（例如 root），

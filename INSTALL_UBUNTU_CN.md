@@ -7,30 +7,26 @@
 
 ## 一键安装 / 更新 / 修复
 
-在 Ubuntu 服务器上执行一条命令即可（脚本自动从 GitHub 拉取项目文件，无需上传目录）：
+在 Ubuntu 服务器上执行两条命令即可（脚本自动从 GitHub 拉取项目文件，无需上传目录）：
 
 **全新安装 / 修复损坏的安装**（完整重装）：
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh) -f
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh -o /tmp/install_ubuntu.sh
+sudo bash /tmp/install_ubuntu.sh -f
 ```
 
-**仅更新代码**（保留数据库与现有配置）：
+**仅更新代码**（保留数据库与现有配置）：把上面的 `-f` 换成 `-u`。
 
-```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh) -u
-```
-
-**自动检测**（已有安装时交互询问选择 修复/更新）：
-
-```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh)
-```
+**自动检测**（已有安装时交互询问选择 修复/更新）：去掉 `-f` / `-u` 参数。
 
 > 提示：
-> - 使用 `bash <(...)`（进程替换）而不是 `curl ... | bash`，前者不会占用标准输入，脚本的交互问答才能正常工作。
-> - GitHub 访问困难时，可把命令中的 `https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master` 换成镜像前缀（例如 `https://ghproxy.com/https://raw.githubusercontent.com/...`），或在脚本内通过 `GIT_REPO` 环境变量指定镜像仓库。
+> - 采用"先下载再执行"，兼容 bash / dash 等任意 shell 与精简系统，不依赖 `/dev/fd` 进程替换。
+> - URL **不要加反引号**：反引号是 bash 的命令替换，会把 URL 当命令执行，报 `/dev/fd/63: No such file or directory` 和 `curl: (23) Failure writing output to destination`。
+> - 不要用 `curl ... | bash`，它会占用标准输入，脚本的交互问答将失效。
+> - GitHub 访问困难时，可把 URL 换成镜像前缀（例如 `https://ghproxy.com/https://raw.githubusercontent.com/...`），或在脚本内通过 `GIT_REPO` 环境变量指定镜像仓库。
 > - npm 源默认使用国内 npmmirror，海外服务器可用 `NPM_REGISTRY=https://registry.npmjs.org` 覆盖。
+> - 系统全量升级默认**不做**（约 1GB 下载且与本项目无关）。确需升级时加 `--upgrade`。
 
 ---
 

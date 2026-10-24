@@ -33,27 +33,24 @@
 
 ## 一键安装（Ubuntu 24.04）
 
-在服务器上执行一条命令即可，脚本自动从 GitHub 拉取项目文件，无需上传目录：
+在服务器上执行两条命令即可，脚本自动从 GitHub 拉取项目文件，无需上传目录：
 
 **全新安装 / 修复损坏的安装**（完整重装）：
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh) -f
+curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh -o /tmp/install_ubuntu.sh
+sudo bash /tmp/install_ubuntu.sh -f
 ```
 
-**仅更新代码**（保留数据库与现有配置）：
+**仅更新代码**（保留数据库与现有配置）：把上面的 `-f` 换成 `-u`。
 
-```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh) -u
-```
+**自动检测**（已有安装时交互询问选择修复/更新）：去掉 `-f` / `-u` 参数即可。
 
-**自动检测**（已有安装时交互询问选择修复/更新）：
-
-```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting-Dashboard/master/install_ubuntu.sh)
-```
-
-> 提示：请使用 `bash <(...)`（进程替换）而不是 `curl ... | bash`，后者会占用标准输入导致脚本交互问答失效。GitHub 访问困难时可在脚本内用 `GIT_REPO` 环境变量指定镜像仓库。
+> 注意：
+> - 采用"先下载再执行"，兼容 bash / dash 等任意 shell 及精简系统，不依赖 `/dev/fd` 进程替换。
+> - URL **不要加反引号**。反引号在 bash 里是命令替换，会把 URL 当命令执行，导致 `/dev/fd/63: No such file or directory` 与 `curl: (23)`。
+> - 不要用 `curl ... | bash`，它会占用标准输入使脚本的交互问答失效。
+> - 网络不佳时脚本会自动重试并在失败后改用 IPv4；GitHub 访问困难时可用 `GIT_REPO` 环境变量指定镜像仓库。
 
 ## 三种运行模式
 
@@ -62,6 +59,7 @@ sudo bash <(curl -fsSL https://raw.githubusercontent.com/BG7TVF/BY7WZ-Contesting
 | 完整安装/修复 | `-f` / `--full` | 从零部署，或完整重装修复损坏的安装 |
 | 仅更新 | `-u` / `--update` | 拉取最新项目文件并更新依赖，**保留数据库与现有配置** |
 | 交互模式 | 无参数 | 已有安装时询问选择修复或更新 |
+| 顺带升级系统 | `--upgrade` | 额外执行 `apt-get full-upgrade`；默认关闭，失败不影响安装 |
 
 ## 安装后必做的配置
 
